@@ -1,0 +1,28 @@
+# Demo / eval outputs (regenerable: python -m robogym.demo)
+results/
+rollouts/
+*.mp4
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+build/
+dist/
+
+# Large model / data artifacts
+*.hdf5
+*.pkl
+checkpoints/
+
+# Vendored upstream third-party clones (full-stack only; not part of the
+# RoboGym artifact and not redistributed here)
+openvla-oft/
+pi05/
+VLA-benchmark/
+
+# Paper PDF (kept locally, not redistributed via this repository)
+main.pdf
+*.pdf

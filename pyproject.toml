@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "robogym"
+version = "1.0.0"
+description = "RoboGym: Beyond Success Rates in VLA Models via Multi-Dimensional Evaluation"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=1.23",
+    "scipy>=1.9",
+    "matplotlib>=3.6",
+    "pandas>=1.5",
+    "tqdm>=4.64",
+]
+
+[project.optional-dependencies]
+# Heavy real-simulation stack (full-stack LIBERO + real VLA models). Not needed
+# for the runnable synthetic demo / tests.
+sim = [
+    "robosuite==1.4.1",
+    "mujoco",
+    "h5py",
+    "draccus",
+    "imageio",
+]
+llm = ["google-generativeai"]   # optional Gemini scoring-script synthesis
+dev = ["pytest>=7", "seaborn"]
+
+[project.scripts]
+robogym-demo = "robogym.demo:main"
+
+[tool.setuptools.packages.find]
+include = ["robogym*", "paper_results*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

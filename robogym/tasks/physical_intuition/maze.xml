@@ -1,0 +1,28 @@
+<mujoco model="maze">
+    <asset>
+        <material name="wall_mat" rgba="0.8 0.5 0.3 1" shininess="0.1"/>
+    </asset>
+    <worldbody>
+        <!-- 外层 Wrapper -->
+        <body name="root_wrapper" pos="0 0 0">
+            
+            <!-- 内层 object (Robosuite 认这个名字) -->
+            <body name="object" pos="0 0 0">
+                <!-- 关键修改：所有的 geom 都加上了 group="0" -->
+                
+                <!-- 底板 -->
+                <geom name="floor" type="box" group="0" size="0.15 0.15 0.005" material="wall_mat" pos="0 0 0"/>
+                
+                <!-- 四周墙壁 -->
+                <geom name="w1" type="box" group="0" size="0.15 0.01 0.03" pos="0 0.14 0.03" material="wall_mat"/>
+                <geom name="w2" type="box" group="0" size="0.15 0.01 0.03" pos="0 -0.14 0.03" material="wall_mat"/>
+                <geom name="w3" type="box" group="0" size="0.01 0.15 0.03" pos="-0.14 0 0.03" material="wall_mat"/>
+                <geom name="w4" type="box" group="0" size="0.01 0.15 0.03" pos="0.14 0 0.03" material="wall_mat"/>
+                
+                <!-- 内部障碍墙 -->
+                <geom name="w_mid" type="box" group="0" size="0.10 0.01 0.03" pos="-0.04 0 0.03" material="wall_mat"/>
+            </body>
+            
+        </body>
+    </worldbody>
+</mujoco>

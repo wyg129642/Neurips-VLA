@@ -1,0 +1,14 @@
+# RoboGym core (sufficient for the runnable synthetic demo + tests + analysis)
+numpy>=1.23
+scipy>=1.9
+matplotlib>=3.6
+pandas>=1.5
+tqdm>=4.64
+
+# Full-stack only (real LIBERO sim + real VLA model adapters). Install with:
+#   pip install -e ".[sim]"
+# robosuite==1.4.1
+# mujoco
+# h5py
+# draccus
+# imageio
