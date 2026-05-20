@@ -1,17 +1,4 @@
-"""System-2 reasoning task framework (paper §3.6 / Figure 2).
-
-Each task is backed by a :class:`robogym.envs.physics_sim.PhysicsReasoningSim`
-subclass: success follows from a physical/logical state (torque balance,
-stacking legality, wall collision, containment count, geometric fit), the
-reasoning cue is exposed in the observation, and the algorithmic oracle
-(paper §4.1) is the only thing that knows the answer. The policy does not.
-A non-reasoning baseline therefore fails on these tasks; see
-``generate_naive_demo`` per sim for the controlled-baseline check.
-
-Test-time randomization of task-critical variables (position, colour, mass,
-target sequence) is implemented inside each sim's ``_setup`` and re-seeded
-per episode, so memorising a single trajectory does not work.
-"""
+"""Reasoning-task wrapper for physics-grounded sims."""
 
 from __future__ import annotations
 
@@ -21,17 +8,12 @@ from ..envs.base import RoboGymEnv
 
 CATEGORIES = ("geometric", "physical", "memory")
 
-class ReasoningTask:
-    """Thin wrapper around a physics-grounded reasoning sim.
 
-    Subclasses set :attr:`category` and :attr:`sim_cls` (a
-    :class:`PhysicsReasoningSim`). Test-time randomization happens inside the
-    sim's ``_setup`` (re-seeded per episode), so :meth:`randomize` just rebinds
-    the seed and rebuilds the instance.
-    """
+class ReasoningTask:
+    """Thin wrapper around a :class:`PhysicsReasoningSim` subclass."""
 
     category: str = "geometric"
-    sim_cls = None  # set by subclass
+    sim_cls = None
     family: str = "reasoning"
 
     def __init__(self, task_id: int = 0, seed: int = 0, dt: float = 0.05):
@@ -43,7 +25,7 @@ class ReasoningTask:
         self._instance = self._sim.instance
 
     def randomize(self, seed: int) -> dict:
-        """Resample task-critical variables for a fresh episode (§3.6)."""
+        """Resample task-critical variables for a fresh episode."""
         self.seed = seed
         self._sim = self.sim_cls(seed=seed, dt=self.dt)
         self._instance = self._sim.instance
@@ -62,17 +44,10 @@ class ReasoningTask:
 
     def expert_demo(self, seed: int | None = None,
                     jitter: float = 0.0) -> tuple[np.ndarray, np.ndarray]:
-        """Algorithmic-oracle trajectory as ``(actions, init_state)``.
-
-        Re-randomises when ``seed`` is given (test-time randomization), so two
-        demos of the same task face different instances and a policy cannot
-        memorise a fixed solution.
-        """
         if seed is not None:
             self.randomize(seed)
         return self._sim.generate_expert_demo(seed=seed, jitter=jitter)
 
-    # introspection used by tests / non-reasoning baseline
     @property
     def instance(self) -> dict:
         return self._instance

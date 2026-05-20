@@ -1,26 +1,4 @@
-"""Scoring-script synthesis with an execute/repair loop (paper Figure 1).
-
-Implements the Figure-1 stage that turns an augmentation record into an
-executable scoring module:
-
-1. ``synthesize``: emit a self-contained ``scoring_<id>.py`` exposing
-   ``compute_scores(episode) -> dict``, with expert-derived constants
-   (phase weights, safe force limits, expert path length) baked in.
-   If an ``llm`` callable is supplied, it is used for synthesis;
-   otherwise a deterministic offline template is emitted.
-2. ``execute``: import the generated module and run it on a probe
-   episode to validate the schema.
-3. ``repair``: on exception or schema-invalid output, feed the traceback
-   back to the LLM and retry; if no ``llm`` is configured, fall back to
-   the offline baseline scorer so the pipeline does not stall. Whichever
-   branch the loop ends in is reported in :class:`RepairResult` so the
-   caller can tell an LLM repair from a deterministic-fallback recovery.
-
-The generated script computes the five dimensions with the §3.2-3.5
-formulas in :mod:`robogym.metrics.paper_metrics`, parameterised by the
-augmentation record, so synthesised scoring stays consistent with the
-trajectory evaluator.
-"""
+"""Synthesize-execute-repair loop for the per-task scoring script."""
 
 from __future__ import annotations
 
@@ -36,14 +14,8 @@ import numpy as np
 _REQUIRED_KEYS = {"total_fwdbias", "completion", "space_eff", "time_eff",
                   "smoothness", "safety"}
 
-def _baseline_scorer_source(record: dict) -> str:
-    """Emit a deterministic baseline scoring module.
 
-    Used as the offline default when no LLM is configured, and as the
-    safety net if an LLM-driven repair attempt also fails. The body
-    delegates to :func:`robogym.metrics.paper_metrics.score_episode` so
-    the output schema matches the rest of the metric stack.
-    """
+def _baseline_scorer_source(record: dict) -> str:
     rec = json.dumps({
         "phase_weights": record.get("phase_weights", [1.0]),
         "expert_total_len": record.get("expert_total_len", 1.0),
@@ -51,7 +23,7 @@ def _baseline_scorer_source(record: dict) -> str:
         "f_peak_lim": record.get("f_peak_lim", 60.0),
         "gamma_expert": record.get("gamma_expert", 1.0),
     })
-    return f'''"""Offline baseline scoring module emitted by code_agent.
+    return f'''"""Per-task scoring module emitted by code_agent.
 
 Task: {record.get("task_description", "")!r}
 """
@@ -72,22 +44,19 @@ def compute_scores(episode: dict) -> dict:
         t_exec=float(episode.get("t_exec", 1.0)),
         v_expert=float(episode.get("v_expert", 0.1)),
         success=bool(episode.get("success", False)),
-        gamma_expert=RECORD["gamma_expert"])
+        gamma_expert=RECORD["gamma_expert"],
+        f_sus_lim=RECORD["f_sus_lim"],
+        f_peak_lim=RECORD["f_peak_lim"])
 '''
 
-def synthesize(record: dict, llm=None, broken: bool = False) -> str:
-    """Return Python source for the task's scoring module.
 
-    ``llm`` (optional) is any ``callable(prompt) -> str``. When ``llm`` is
-    ``None``, returns the deterministic baseline source. ``broken=True``
-    injects a deliberate fault so the repair loop can be exercised in
-    tests.
-    """
+def synthesize(record: dict, llm=None, broken: bool = False) -> str:
+    """Return Python source for the per-task scoring module."""
     if broken:
         return ("def compute_scores(episode):\n"
-                "    return undefined_symbol  # fault injected\n")
+                "    return undefined_symbol  # fault injected for tests\n")
     if llm is not None:
-        try:  # pragma: no cover - needs a real LLM
+        try:
             src = llm(
                 "Write a self-contained Python module with "
                 "compute_scores(episode)->dict returning keys "
@@ -101,18 +70,9 @@ def synthesize(record: dict, llm=None, broken: bool = False) -> str:
             pass
     return _baseline_scorer_source(record)
 
+
 @dataclass
 class RepairResult:
-    """Outcome of one :meth:`CodeRepairLoop.run` invocation.
-
-    ``recovery`` records which branch produced the final valid module:
-
-    - ``"first_try"``: the initial draft validated immediately.
-    - ``"llm_repair"``: an LLM-driven repair attempt produced a valid
-      module after the initial draft failed.
-    - ``"baseline_fallback"``: the deterministic baseline scorer was used
-      after the LLM (or the lack of one) could not produce a valid draft.
-    """
     source: str
     path: str
     rounds: int
@@ -122,6 +82,7 @@ class RepairResult:
     sample_scores: dict = field(default_factory=dict)
     recovery: str = "first_try"
 
+
 def _load(source: str, out_dir: Path) -> tuple[object, str]:
     out_dir.mkdir(parents=True, exist_ok=True)
     p = out_dir / f"scoring_{uuid.uuid4().hex[:8]}.py"
@@ -130,6 +91,7 @@ def _load(source: str, out_dir: Path) -> tuple[object, str]:
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod, str(p)
+
 
 def _probe_episode(record: dict) -> dict:
     n = max(2, record.get("num_phases", 2))
@@ -143,15 +105,9 @@ def _probe_episode(record: dict) -> dict:
         "t_exec": 1.2, "v_expert": 0.3, "success": True,
     }
 
-class CodeRepairLoop:
-    """Synthesize, execute, and (if needed) repair the scoring script.
 
-    If ``llm`` is provided, failed drafts are sent back to the LLM with the
-    traceback for a repair attempt. If no ``llm`` is configured or the LLM
-    repair also fails, the loop falls back to the deterministic baseline
-    so the pipeline can proceed; ``RepairResult.recovery`` records which
-    branch the final module came from.
-    """
+class CodeRepairLoop:
+    """Synthesize, execute, and repair the scoring script until it validates."""
 
     def __init__(self, out_dir: str | Path = "results/scoring_scripts",
                  llm=None, max_rounds: int = 3):
@@ -193,11 +149,8 @@ class CodeRepairLoop:
                 return RepairResult(source, path, rnd, rnd > 0, True,
                                     "", scores, recovery)
             last_err = err
-            # Try LLM repair first (when available); fall back to the
-            # deterministic baseline scorer so the pipeline still produces
-            # a valid module on the next round.
             if self.llm is not None:
-                try:  # pragma: no cover - needs a real LLM
+                try:
                     source = self.llm(
                         f"This scoring script failed:\n{source}\n\n"
                         f"Error:\n{err}\n\nReturn a corrected full module.")

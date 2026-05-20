@@ -1,16 +1,11 @@
-"""Expert-replay oracle policy.
-
-Replays the expert demo actions so the full pipeline (env, rollout,
-five-dimensional metrics, CSV, figures) can be run and verified without
-loading model weights or using a GPU. The oracle scores near-ceiling on
-every dimension and is the natural sanity baseline for the evaluator.
-"""
+"""Expert-replay oracle policy used as the metric-engine sanity baseline."""
 
 from __future__ import annotations
 
 import numpy as np
 
 from .base import Policy
+
 
 class OraclePolicy(Policy):
     name = "oracle"

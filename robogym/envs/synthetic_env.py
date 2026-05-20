@@ -1,29 +1,19 @@
-"""Dependency-free synthetic simulation backend.
-
-A lightweight backend implementing the :class:`SimBackend` protocol in pure
-numpy. a small tabletop pick-and-place world whose kinematics, moved-object
-tracking, contact-force signal and flattened-state save/restore are faithful
-enough to drive the metric engine end-to-end without mujoco/robosuite/LIBERO.
-
-It lets the full pipeline run and be tested without the heavy simulation stack
-(``python -m robogym.demo``, ``pytest``). For real LIBERO physics, use
-:class:`robogym.envs.libero_env`.
-"""
+"""Dependency-free pick-and-place backend used by the runnable demo + tests."""
 
 from __future__ import annotations
 
 import numpy as np
 
-# ee, gripper bodies first, then task objects. Names chosen so the
-# evaluator's keyword blacklist keeps exactly the task objects as "moved".
+from ._smoothing import bspline_sample, grip_schedule
+
 _FIXED_BODIES = ["world", "robot0_base", "robot0_link7", "gripper0_grip_site"]
 
-class SyntheticPickPlaceSim:
-    """A minimal 7-DoF-delta tabletop pick-and-place world.
 
-    Action convention matches LIBERO: ``[dx, dy, dz, dR, dP, dY, grip]`` with
-    ``grip < 0`` == open, ``grip > 0`` == close (OpenVLA sign convention is
-    handled upstream by the policy adapter).
+class SyntheticPickPlaceSim:
+    """A 7-DoF-delta tabletop sim that satisfies the SimBackend protocol.
+
+    Action layout matches LIBERO: ``[dx, dy, dz, dR, dP, dY, grip]`` with
+    ``grip < 0`` open and ``grip > 0`` closed.
     """
 
     def __init__(self, task_objects: list[str] | None = None,
@@ -39,7 +29,6 @@ class SyntheticPickPlaceSim:
             + [target_name]
         self._ee_body_id = self.body_list.index("gripper0_grip_site")
 
-        # nominal geometry (metres, robosuite-ish tabletop frame)
         self._home_ee = np.array([-0.10, 0.0, 1.05])
         self._obj_home = {
             name: np.array([0.0 + 0.04 * i, -0.10 + 0.05 * i, 0.92])
@@ -49,15 +38,15 @@ class SyntheticPickPlaceSim:
 
         self._init_dynamic_state()
 
-    # state
     def _init_dynamic_state(self):
         self.ee = self._home_ee.copy()
         self.gripper = -1.0
         self.obj_pos = {k: v.copy() for k, v in self._obj_home.items()}
-        self.grasped = None
+        self.grasped: str | None = None
         self.step_count = 0
         self.success = False
         self._last_force = 0.0
+        self._ee_vel = np.zeros(3)
 
     def reset(self) -> dict:
         self._init_dynamic_state()
@@ -83,8 +72,8 @@ class SyntheticPickPlaceSim:
     def ee_pos(self) -> np.ndarray:
         return self.ee.copy()
 
-    def ee_velocity(self) -> np.ndarray:  # finite-diff fallback used otherwise
-        return getattr(self, "_ee_vel", np.zeros(3))
+    def ee_velocity(self) -> np.ndarray:
+        return self._ee_vel.copy()
 
     def body_xpos(self, body_id: int) -> np.ndarray:
         name = self.body_list[body_id]
@@ -122,47 +111,37 @@ class SyntheticPickPlaceSim:
         self.step_count = int(round(f[i])); i += 1
         self.success = bool(round(f[i]))
 
-    def forward(self) -> None:  # no derived quantities to recompute
+    def forward(self) -> None:
         return None
 
     def contact_forces(self) -> np.ndarray:
-        """``cfrc_ext[1:]`` analogue: small baseline noise + table/grasp spikes."""
         n = self.n_bodies - 1
         base = self.rng.normal(0.0, 1.5, size=(n, 6))
-        # table-press spike if EE pushes below table height
         press = max(0.0, 0.92 - self.ee[2]) * 600.0
-        # grasp transient
         grasp_spike = 18.0 if (self.grasped is not None
                                and self.step_count % 17 == 0) else 0.0
         base[self._ee_body_id - 1, :3] += press + grasp_spike
         self._last_force = press + grasp_spike
         return base
 
-    # dynamics
     def step(self, action) -> tuple[dict, float, bool, dict]:
         a = np.asarray(action, dtype=float).ravel()
         prev_ee = self.ee.copy()
         self.ee = self.ee + a[:3] * self.action_scale
-        # keep inside a generous box (no hard clip -> metrics see the violation)
         self.gripper = float(np.clip(a[6] if len(a) > 6 else self.gripper,
                                      -1.0, 1.0))
         self._ee_vel = (self.ee - prev_ee) / self.dt
 
-        # grasp logic: closing near an object grabs it
         if self.grasped is None and self.gripper > 0.0:
             for name, p in self.obj_pos.items():
                 if np.linalg.norm(self.ee - p) < 0.05:
                     self.grasped = name
                     break
-        # release
         if self.grasped is not None and self.gripper <= 0.0:
             self.grasped = None
-
-        # grasped object follows the gripper
         if self.grasped is not None:
             self.obj_pos[self.grasped] = self.ee + np.array([0.0, 0.0, -0.02])
 
-        # success: an object released into the target zone
         done = False
         for name, p in self.obj_pos.items():
             if (self.grasped != name
@@ -174,14 +153,10 @@ class SyntheticPickPlaceSim:
         info = {"success": self.success}
         return self._obs(), (1.0 if self.success else 0.0), done, info
 
-    # expert demo generator (for oracle policy + evaluator pre-roll)
     def generate_expert_demo(self, jitter: float = 0.0,
                              seed: int | None = None) -> tuple[np.ndarray, np.ndarray]:
-        """Return ``(expert_actions, expert_init_state)`` for a clean reach ->
-        grasp -> transport -> place trajectory of the first task object.
-
-        ``jitter`` injects small per-step noise (used to synthesise the 500
-        balanced demos per task the paper mentions in §4.1)."""
+        """Cubic B-spline through cartesian waypoints, sampled at the control
+        rate to produce jerk-free EE velocities (Sec. 4.1)."""
         rng = np.random.default_rng(self.rng.integers(1 << 30)
                                     if seed is None else seed)
         self.reset()
@@ -189,36 +164,34 @@ class SyntheticPickPlaceSim:
 
         obj = self.task_objects[0]
         obj_p = self._obj_home[obj].copy()
+        tgt = self._target_pos
+
+        waypoints = np.array([
+            self.ee.copy(),
+            obj_p + np.array([0.0, 0.0, 0.06]),
+            obj_p,
+            obj_p,
+            obj_p + np.array([0.0, 0.0, 0.12]),
+            tgt + np.array([0.0, 0.0, 0.10]),
+            tgt,
+            tgt,
+        ])
+        grips_at_wp = np.array([-1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0])
+
+        spps = 8
+        positions = bspline_sample(waypoints, samples_per_segment=spps)
+        grips = grip_schedule(len(waypoints), spps, grips_at_wp)
+
         actions = []
+        for target_pos, grip in zip(positions, grips):
+            delta = (target_pos - self.ee) / self.action_scale
+            if jitter:
+                delta = delta + rng.normal(0.0, jitter, 3)
+            delta = np.clip(delta, -1.0, 1.0)
+            act = np.array([delta[0], delta[1], delta[2], 0, 0, 0, grip])
+            actions.append(act)
+            self.step(act.tolist())
 
-        def move_towards(target, n, grip, jit):
-            """Cosine-eased segment -> continuous, jerk-free EE velocity (paper
-            §4.1: oracle waypoints "B-spline interpolated to produce
-            continuous, jerk-free end-effector velocities"). Smooth velocity
-            ramps keep the FFT/SPARC smoothness metric near ceiling
-            for a true expert."""
-            target = np.asarray(target, float)
-            p0 = self.ee.copy()
-            for k in range(1, n + 1):
-                s = 0.5 - 0.5 * np.cos(np.pi * k / n)        # smoothstep ease
-                desired = p0 + (target - p0) * s
-                delta = (desired - self.ee) / self.action_scale
-                if jit:
-                    delta = delta + rng.normal(0, jit, 3)
-                delta = np.clip(delta, -1.0, 1.0)
-                act = np.array([delta[0], delta[1], delta[2], 0, 0, 0, grip])
-                actions.append(act)
-                self.step(act.tolist())
-
-        move_towards(obj_p + np.array([0, 0, 0.06]), 26, -1.0, jitter)  # approach
-        move_towards(obj_p, 12, -1.0, jitter)                           # descend
-        move_towards(obj_p, 4, 1.0, 0.0)                                # grasp
-        move_towards(obj_p + np.array([0, 0, 0.12]), 14, 1.0, jitter)   # lift
-        move_towards(self._target_pos + np.array([0, 0, 0.10]), 30,
-                     1.0, jitter)                                       # carry
-        move_towards(self._target_pos, 12, 1.0, jitter)                 # lower
-        move_towards(self._target_pos, 6, -1.0, 0.0)                    # release
-
-        expert_actions = np.array(actions, dtype=float)
+        expert_actions = np.asarray(actions, float)
         self.reset()
         return expert_actions, init_state

@@ -1,4 +1,4 @@
-"""System-2 reasoning task-suite tests (paper §3.6 / Table 4)."""
+"""System-2 reasoning task-suite tests."""
 
 import numpy as np
 
@@ -13,18 +13,20 @@ from robogym.tasks import (
     reasoning_suite_by_category,
 )
 
+
 def test_suite_has_50_tasks_in_3_levels():
     suite = build_reasoning_suite(seed=0)
-    assert len(suite) == 50                                  # paper: 50 tasks
+    assert len(suite) == 50
     by = reasoning_suite_by_category(0)
     assert set(by) == {"geometric", "physical", "memory"}
     assert sum(len(v) for v in by.values()) == 50
 
+
 def test_test_time_randomization_changes_instance():
-    """Different seeds => different task-critical variables (§3.6)."""
     a = MazeTask(seed=1)._instance
     b = MazeTask(seed=2)._instance
     assert not np.allclose(a["goal"], b["goal"]) or a["mirror"] != b["mirror"]
+
 
 def test_every_task_yields_solvable_expert_demo():
     for cls in (MazeTask, SeesawWeightTask, TangramTask, NumberBlockTask,
@@ -35,9 +37,9 @@ def test_every_task_yields_solvable_expert_demo():
         assert len(actions) > 5
         assert init_state.size > 0
 
+
 def test_maze_progress_logic():
-    """two-segment progress increases start->mid->target and
-    zeroes when the ball falls off the table."""
+    """Detour progress increases start -> mid -> target; off-table zeroes out."""
     t = MazeTask(seed=0)
     inst = t._instance
     p0 = MazeTask.get_progress(np.asarray(inst["start"], float), inst)
@@ -45,12 +47,11 @@ def test_maze_progress_logic():
     p2 = MazeTask.get_progress(np.asarray(inst["goal"], float), inst)
     assert 0.0 <= p0 < p1 < p2 <= 1.0
     fell = np.array([inst["goal"][0], inst["goal"][1], 0.0])
-    assert MazeTask.get_progress(fell, inst) == 0.0          # off-table -> 0
+    assert MazeTask.get_progress(fell, inst) == 0.0
+
 
 def test_reasoning_tasks_genuinely_require_reasoning():
-    """Fidelity guarantee: the algorithmic oracle solves every reasoning
-    family, while the non-reasoning baseline fails most. proving success is a
-    real physical/logical predicate, not script replay (paper §3.6)."""
+    """Oracle should solve, non-reasoning baseline should mostly fail."""
     import collections
 
     from robogym.tasks import build_reasoning_suite
@@ -72,6 +73,7 @@ def test_reasoning_tasks_genuinely_require_reasoning():
     for fam, (n, o, nv) in agg.items():
         assert o / n >= 0.9, f"{fam} oracle SR too low: {o}/{n}"
         assert nv / n <= 0.65, f"{fam} not reasoning-gated: naive {nv}/{n}"
+
 
 def test_reasoning_task_env_is_runnable():
     from robogym.metrics import TrajectoryEvaluator

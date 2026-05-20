@@ -1,2 +1,8 @@
-"""Compat shim -> physics-grounded memory sims."""
-from .sim import ColorHanoiSim, ColorHanoiTask, CountingSim, SequentialCountingTask  # noqa: F401
+"""Re-exports for backward-compatible imports."""
+
+from .sim import (  # noqa: F401
+    ColorHanoiSim,
+    ColorHanoiTask,
+    CountingSim,
+    SequentialCountingTask,
+)

@@ -1,10 +1,4 @@
-"""Result aggregation into task / suite / global CSVs.
-
-The CSV column schema and rounding match the OpenVLA-OFT runner
-(:mod:`robogym.runners.run_libero_eval_custom_metrics`), so output is
-interchangeable with that runner's ``task_details``, ``suite_summary``,
-and ``global_summary`` files.
-"""
+"""CSV aggregation: per-episode, per-task, and per-suite summaries."""
 
 from __future__ import annotations
 
@@ -30,12 +24,13 @@ GLOBAL_HEADER = ["suite_name", "num_tasks", "num_episodes", "success_rate",
                  "avg_time_eff", "avg_smoothness", "avg_safety",
                  "avg_raw_dev", "avg_dropped_rate"]
 
+
 def _mean(rows: list[dict[str, Any]], key: str) -> float:
     vals = [r.get(key, 0.0) for r in rows if r.get(key, None) is not None]
     return float(np.mean(vals)) if vals else 0.0
 
+
 def write_task_details(task_dir: Path, episode_rows: list[dict]) -> Path:
-    """Write one task's per-episode ``task_details.csv`` (schema)."""
     task_dir.mkdir(parents=True, exist_ok=True)
     out = task_dir / "task_details.csv"
     with open(out, "w", newline="") as f:
@@ -47,9 +42,9 @@ def write_task_details(task_dir: Path, episode_rows: list[dict]) -> Path:
             w.writerow(row)
     return out
 
+
 def summarize_task(suite_name: str, task_id: int, task_name: str,
                    task_description: str, episode_rows: list[dict]) -> dict:
-    """Per-task summary record (feeds suite_summary.csv)."""
     s = {
         "suite_name": suite_name,
         "task_id": task_id,
@@ -63,8 +58,8 @@ def summarize_task(suite_name: str, task_id: int, task_name: str,
         s[f"avg_{k}"] = _mean(episode_rows, k)
     return s
 
+
 def init_summary_csvs(out_dir: Path) -> tuple[Path, Path]:
-    """Create ``global_summary.csv`` + ``suite_summary.csv`` with headers."""
     out_dir.mkdir(parents=True, exist_ok=True)
     g, s = out_dir / "global_summary.csv", out_dir / "suite_summary.csv"
     with open(g, "w", newline="") as f:
@@ -72,6 +67,7 @@ def init_summary_csvs(out_dir: Path) -> tuple[Path, Path]:
     with open(s, "w", newline="") as f:
         csv.writer(f).writerow(SUITE_HEADER)
     return g, s
+
 
 def append_suite_row(suite_csv: Path, task_summary: dict) -> None:
     with open(suite_csv, "a", newline="") as f:
@@ -89,9 +85,9 @@ def append_suite_row(suite_csv: Path, task_summary: dict) -> None:
             round(task_summary["avg_dropped"], 4),
         ])
 
+
 def write_global_row(global_csv: Path, suite_name: str,
                      per_task: list[dict]) -> dict:
-    """Aggregate per-task summaries -> one suite-level ``global_summary.csv`` row."""
     if not per_task:
         return {}
     row = {

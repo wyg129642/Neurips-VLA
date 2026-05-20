@@ -1,10 +1,4 @@
-"""OpenVLA-OFT policy adapter.
-
-Wraps the model-loading and ``get_action`` path used by the OpenVLA-OFT
-runner (the ``experiments.robot.*`` helpers from the openvla-oft repo).
-Imports are deferred so this module stays importable on machines that do
-not have torch, transformers, or the openvla weights.
-"""
+"""OpenVLA-OFT policy adapter (legacy baseline, not one of the paper's eight)."""
 
 from __future__ import annotations
 
@@ -12,13 +6,8 @@ import numpy as np
 
 from .base import Policy
 
+
 class OpenVLAOFTPolicy(Policy):
-    """OpenVLA-OFT adapter.
-
-    ``cfg`` is the ``GenerateConfig`` (or a duck-typed equivalent).
-    Model components are loaded lazily on first :meth:`reset`.
-    """
-
     name = "openvla_oft"
 
     def __init__(self, cfg):
@@ -31,12 +20,11 @@ class OpenVLAOFTPolicy(Policy):
     def _ensure_loaded(self):
         if self._loaded:
             return
-        # Mirrors initialize_model() in the OpenVLA-OFT runner.
-        from experiments.robot.robot_utils import (
-            get_image_resize_size, get_model)
         from experiments.robot.openvla_utils import (
             get_action_head, get_noisy_action_projector, get_processor,
             get_proprio_projector)
+        from experiments.robot.robot_utils import (
+            get_image_resize_size, get_model)
 
         self._model = get_model(self.cfg)
         self._proprio = (get_proprio_projector(self.cfg, self._model.llm_dim,

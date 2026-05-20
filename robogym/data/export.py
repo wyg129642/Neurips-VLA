@@ -1,20 +1,4 @@
-"""Expert-dataset export: LIBERO HDF5 schema plus RLDS and a manifest.
-
-Writes the HDF5 layout the OpenVLA-OFT ``ExpertDataLoader`` reads:
-
-    f["data"]["demo_i"]["actions"]   (T, 7)
-    f["data"]["demo_i"]["states"]    (T+1, S)   # states[0] == init_state
-
-so a generated dataset is a drop-in replacement for the LIBERO expert demos
-in the OpenVLA-OFT runner or the unified runner with ``backend="libero"``.
-Also emits a TFDS/RLDS-style sharded JSON-lines export (for VLA
-fine-tuning frameworks that ingest RLDS) and a dataset manifest with the
-per-domain balance.
-
-``h5py`` is an optional dependency. When it is unavailable, a portable
-``.npz`` fallback with the same logical schema is written so the pipeline
-remains runnable and testable.
-"""
+"""HDF5 / RLDS / manifest exporters for the generated expert demos."""
 
 from __future__ import annotations
 
@@ -22,6 +6,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+
 
 def _write_hdf5(path: Path, demos) -> bool:
     try:
@@ -40,8 +25,8 @@ def _write_hdf5(path: Path, demos) -> bool:
         grp.attrs["task_name"] = demos[0].task_name if demos else ""
     return True
 
+
 def _write_npz(path: Path, demos) -> None:
-    """Portable fallback with the same logical schema as the HDF5 layout."""
     blob = {}
     for i, d in enumerate(demos):
         blob[f"demo_{i}/actions"] = np.asarray(d.actions, np.float32)
@@ -50,8 +35,9 @@ def _write_npz(path: Path, demos) -> None:
         blob[f"demo_{i}/seed"] = np.array([d.seed])
     np.savez_compressed(path, **blob)
 
+
 def write_task_dataset(out_dir: str | Path, task_name: str, demos) -> dict:
-    """Write one task's demos as ``{task_name}_demo.hdf5`` (the standard naming)."""
+    """Write ``{task_name}_demo.hdf5`` (or npz fallback) for one task."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     h5 = out_dir / f"{task_name}_demo.hdf5"
@@ -64,10 +50,10 @@ def write_task_dataset(out_dir: str | Path, task_name: str, demos) -> dict:
     return {"task_name": task_name, "format": fmt, "path": written,
             "num_demos": len(demos)}
 
+
 def write_rlds_shard(out_dir: str | Path, task_name: str, demos,
                      shard_size: int = 64) -> list[str]:
-    """RLDS/TFDS-style JSON-lines episodes (one step per line) for VLA
-    fine-tuning frameworks (OpenVLA RLDS, openpi LeRobot ingestion)."""
+    """RLDS / TFDS-style JSON-lines episodes (one step per line)."""
     out_dir = Path(out_dir) / "rlds" / task_name
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = []
@@ -89,12 +75,12 @@ def write_rlds_shard(out_dir: str | Path, task_name: str, demos,
         paths.append(str(p))
     return paths
 
+
 def write_manifest(out_dir: str | Path, report, cfg) -> Path:
-    """Dataset manifest: totals, per-domain balance, quota shortfalls."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     man = {
-        "spec": "paper §4.1: 500 successful demos/task, 25k balanced",
+        "spec": "500 success-filtered demos/task across the 50-task suite",
         "demos_per_task_target": cfg.demos_per_task,
         "total_demos": report.total_demos,
         "num_tasks": len(report.per_task),

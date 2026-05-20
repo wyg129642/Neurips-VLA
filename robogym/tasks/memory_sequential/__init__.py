@@ -1,4 +1,11 @@
-"""Memory-Dependent Sequential Reasoning (colour Hanoi, counting)."""
-from .sim import ColorHanoiSim, ColorHanoiTask, CountingSim, SequentialCountingTask
+"""Memory-Dependent Sequential Reasoning (colour Hanoi, sequential counting)."""
 
-__all__ = ["ColorHanoiTask", "SequentialCountingTask", "ColorHanoiSim", "CountingSim"]
+from .sim import (
+    ColorHanoiSim,
+    ColorHanoiTask,
+    CountingSim,
+    SequentialCountingTask,
+)
+
+__all__ = ["ColorHanoiTask", "SequentialCountingTask",
+           "ColorHanoiSim", "CountingSim"]

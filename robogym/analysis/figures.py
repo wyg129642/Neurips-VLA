@@ -1,12 +1,4 @@
-"""Figure 3 radar charts and supporting diagnostic plots.
-
-Figure 3 is the radar chart of the headline dimensions for (a) Augmented
-LIBERO and (b) System 2 reasoning tasks. The bar and heatmap helpers below
-are supporting diagnostics (the Spearman heatmap visualises Table 5).
-All helpers work on either the reported paper numbers in ``paper_results``
-or a live runner's ``runs_to_model_table`` output, so a real eval yields
-the same plots.
-"""
+"""Figure 3 radar charts and supporting bar / heatmap diagnostics."""
 
 from __future__ import annotations
 
@@ -15,19 +7,20 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 
 _RADAR_AXES = ["SR", "Comp", "Space", "Time", "Smooth", "Safety"]
+
 
 def _norm_row(row):
     """SR is 0-1, the rest 0-100 -> put SR on the same 0-100 radial scale."""
     r = list(row)
     return [r[0] * 100.0] + r[1:]
 
+
 def radar_chart(model_table: dict[str, list], save_path: str | Path,
                 title: str = "Multi-dimensional performance") -> Path:
-    """Paper Figure 3: radar over the six headline dimensions."""
     labels = _RADAR_AXES
     ang = np.linspace(0, 2 * np.pi, len(labels), endpoint=False)
     ang = np.concatenate([ang, ang[:1]])
@@ -48,9 +41,9 @@ def radar_chart(model_table: dict[str, list], save_path: str | Path,
     plt.close(fig)
     return Path(save_path)
 
+
 def metric_bars(model_table: dict[str, list], save_path: str | Path,
                 title: str = "Performance comparison across six metrics") -> Path:
-    """Diagnostic (not a paper figure): 2x3 grid of per-metric bar charts."""
     models = list(model_table)
     fig, axs = plt.subplots(2, 3, figsize=(17, 9))
     for mi, mname in enumerate(_RADAR_AXES):
@@ -73,10 +66,9 @@ def metric_bars(model_table: dict[str, list], save_path: str | Path,
     plt.close(fig)
     return Path(save_path)
 
+
 def category_bars(by_cat: dict[str, list], cat_names: list[str],
-                   save_path: str | Path) -> Path:
-    """Diagnostic (not a paper figure): grouped bars visualising Table 4
-    (success rate per reasoning category)."""
+                  save_path: str | Path) -> Path:
     models = list(by_cat)
     x = np.arange(len(models))
     w = 0.8 / len(cat_names)
@@ -99,10 +91,9 @@ def category_bars(by_cat: dict[str, list], cat_names: list[str],
     plt.close(fig)
     return Path(save_path)
 
+
 def heatmap(matrix, row_labels, col_labels, save_path: str | Path,
             title: str = "", cbar_label: str = "", fmt: str = "{:.2f}") -> Path:
-    """Diagnostic (not a paper figure): annotated heatmap, used here to
-    visualise the Table 5 Spearman ρ matrix."""
     M = np.asarray(matrix, float)
     fig, ax = plt.subplots(figsize=(1.4 * len(col_labels) + 3,
                                     0.6 * len(row_labels) + 2))
@@ -127,15 +118,9 @@ def heatmap(matrix, row_labels, col_labels, save_path: str | Path,
     plt.close(fig)
     return Path(save_path)
 
-def render_paper_figures(out_dir: str | Path) -> list[Path]:
-    """Render Figure 3 plus supporting diagnostic plots from the transcribed
-    paper numbers in :mod:`paper_results`.
 
-    ``fig3a`` / ``fig3b`` are the paper's Figure 3 radars (Augmented LIBERO
-    and System 2 reasoning). The remaining ``diag_*`` files are diagnostics
-    that visualise Tables 2-5 (per-metric bars, Table 4 category bars,
-    Table 5 Spearman ρ).
-    """
+def render_paper_figures(out_dir: str | Path) -> list[Path]:
+    """Render Figure 3 plus the Table 4-5 diagnostic plots."""
     import sys
 
     root = Path(__file__).resolve().parents[2]
@@ -145,15 +130,13 @@ def render_paper_figures(out_dir: str | Path) -> list[Path]:
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    made = [
-        # Paper Figure 3 (the only data-driven paper figure).
+    return [
         radar_chart(P.TABLE2_AUGMENTED_LIBERO,
                     out / "fig3a_radar_augmented_libero.png",
                     "Figure 3a: Augmented LIBERO"),
         radar_chart(P.TABLE3_REASONING,
                     out / "fig3b_radar_reasoning.png",
                     "Figure 3b: System 2 reasoning tasks"),
-        # Supporting diagnostics (not paper figures).
         metric_bars(P.TABLE2_AUGMENTED_LIBERO,
                     out / "diag_bars_augmented_libero.png",
                     "Augmented LIBERO (Table 2)"),
@@ -165,10 +148,9 @@ def render_paper_figures(out_dir: str | Path) -> list[Path]:
         heatmap(P.TABLE5_SPEARMAN, P.TABLE5_METRIC_NAMES,
                 P.TABLE5_METRIC_NAMES,
                 out / "diag_table5_spearman_heatmap.png",
-                "Table 5: Spearman's rho of five key metrics",
-                "Spearman's rho"),
+                "Table 5: Spearman rho of five key metrics",
+                "Spearman rho"),
     ]
-    return made
 
-# Backwards-compatible alias for callers that imported the previous name.
+
 reproduce_paper_figures = render_paper_figures

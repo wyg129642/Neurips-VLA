@@ -1,11 +1,4 @@
-"""RoboGym multi-dimensional metric engine.
-
-- :class:`TrajectoryEvaluator`: the streaming heuristic evaluator.
-- :func:`score_episode`: paper-faithful §3.2-3.5 scorer (drop-in).
-- :mod:`dtw`, :mod:`sparc`, :mod:`safety`: canonical §3.2 / §3.4 / §3.5
-  implementations.
-- :mod:`aggregate`: CSV schema for task, suite, and global summaries.
-"""
+"""Multi-dimensional metric engine."""
 
 from .aggregate import (
     append_suite_row,

@@ -1,13 +1,4 @@
-"""LIBERO simulation backend with the Figure-1 task-augmentation wrapper.
-
-Adapts a robosuite/mujoco LIBERO env to :class:`robogym.envs.base.SimBackend`
-so the streaming metric engine runs unchanged on real LIBERO. The
-augmentation wrapper applies the Figure 1 / §3.1 pipeline.
-
-Imports of ``libero`` and ``robosuite`` are deferred so the rest of the
-package (metrics, analysis, synthetic demo, tests) is usable on machines
-without the heavy simulation stack.
-"""
+"""LIBERO backend (real robosuite/mujoco sim) and augmentation wrapper."""
 
 from __future__ import annotations
 
@@ -15,12 +6,9 @@ import numpy as np
 
 from .base import RoboGymEnv
 
-class LiberoBackend:
-    """Wraps a robosuite ``env`` (LIBERO) in the :class:`SimBackend` protocol.
 
-    The few simulator operations the trajectory evaluator needs map 1:1 onto the
-    mujoco ``env.sim`` API the original implementation used directly.
-    """
+class LiberoBackend:
+    """Adapts a robosuite LIBERO env to the :class:`SimBackend` protocol."""
 
     def __init__(self, env, ee_site_name: str = "gripper0_grip_site"):
         self.env = env
@@ -61,31 +49,24 @@ class LiberoBackend:
     def contact_forces(self) -> np.ndarray:
         return self.sim.data.cfrc_ext[1:]
 
+
 def make_libero_env(task, model_family: str = "openvla",
                     resolution: int = 256) -> tuple[object, str]:
-    """Construct a LIBERO env via the ``libero_utils.get_libero_env``.
-
-    Returns ``(env, task_description)``. Raises a clear error if the simulation
-    stack is unavailable (machines without the heavy stack) so callers can fall back to the
-    synthetic backend.
-    """
     try:
         from experiments.robot.libero.libero_utils import get_libero_env
-    except Exception as exc:  # pragma: no cover - depends on full stack
+    except Exception as exc:
         raise RuntimeError(
-            "Real LIBERO unavailable (need robosuite/mujoco/libero + the "
-            "openvla-oft experiments package on PYTHONPATH). Use the synthetic "
-            "backend for a dependency-free run: see robogym.envs.synthetic_env."
+            "Real LIBERO unavailable (robosuite + mujoco + libero + the "
+            "openvla-oft experiments package must be importable). Use the "
+            "synthetic backend for a dependency-free run."
         ) from exc
     return get_libero_env(task, model_family, resolution=resolution)
+
 
 def build_augmented_env(task, augmentation: dict | None = None,
                         model_family: str = "openvla",
                         resolution: int = 256, dt: float = 0.05) -> RoboGymEnv:
-    """The paper's "Task Augmentation" step (Fig 1): take a standard
-    binary-success LIBERO task and return a :class:`RoboGymEnv` carrying the
-    multi-dimensional scoring metadata produced by the augmentation pipeline.
-    """
+    """Wrap a LIBERO task in a :class:`RoboGymEnv` carrying the augmentation record."""
     env, desc = make_libero_env(task, model_family, resolution)
     return RoboGymEnv(LiberoBackend(env), task_description=desc,
                       augmentation=augmentation, dt=dt)

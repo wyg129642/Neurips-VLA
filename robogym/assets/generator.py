@@ -1,11 +1,9 @@
-"""Reasoning-centric asset generation (paper §3.6).
+"""Reasoning-centric asset generation.
 
-Pluggable generation backends (text-to-3D, image-to-3D, AI texture) with a
-deterministic procedural fallback so the asset library and appearance
-randomization can be built without the heavy simulation stack. Each asset
-gets a MuJoCo MJCF and an OBJ mesh (geometry), a procedural or AI texture
-PNG (appearance), and physical properties (mass, friction, mass
-distribution) sampled from logged, reproducible ranges.
+Pluggable text-to-3D, image-to-3D, and AI-texture backends with a
+procedural fallback so the asset library always builds. Each asset is
+emitted as a MuJoCo MJCF together with an OBJ mesh, a PNG texture, and
+its physical properties.
 """
 
 from __future__ import annotations
@@ -16,20 +14,18 @@ from pathlib import Path
 
 import numpy as np
 
-# Physical properties: appearance is randomised, physics is controlled.
+
 @dataclass
 class PhysicalProperties:
     mass: float
     friction: float
-    com_offset: tuple                 # mass-distribution (center-of-mass)
+    com_offset: tuple
     inertia_scale: float
 
     @staticmethod
     def sample(rng: np.random.Generator,
                mass_range=(0.05, 1.2),
                friction_range=(0.3, 1.2)) -> "PhysicalProperties":
-        """Programmatically vary properties at test time from controlled
-        ranges so Physical-Intuition tasks remain physically faithful."""
         return PhysicalProperties(
             mass=float(rng.uniform(*mass_range)),
             friction=float(rng.uniform(*friction_range)),
@@ -37,24 +33,21 @@ class PhysicalProperties:
             inertia_scale=float(rng.uniform(0.8, 1.2)),
         )
 
-# Geometry backends.
-class ProceduralGeometryBackend:
-    """Deterministic parametric primitives (offline default, always works)."""
 
+class ProceduralGeometryBackend:
     name = "procedural"
 
     _PRIMS = {"box": (0.03, 0.03, 0.03), "cylinder": (0.025, 0.04, 0.0),
               "sphere": (0.025, 0.0, 0.0), "ring": (0.03, 0.012, 0.0)}
 
     def make_obj(self, kind: str, rng) -> str:
-        """Emit a tiny OBJ (unit primitive scaled by the MJCF)."""
         if kind == "box":
             v = [(-1, -1, -1), (1, -1, -1), (1, 1, -1), (-1, 1, -1),
                  (-1, -1, 1), (1, -1, 1), (1, 1, 1), (-1, 1, 1)]
             f = [(1, 2, 3), (1, 3, 4), (5, 6, 7), (5, 7, 8),
                  (1, 2, 6), (1, 6, 5), (3, 4, 8), (3, 8, 7),
                  (2, 3, 7), (2, 7, 6), (1, 4, 8), (1, 8, 5)]
-        else:  # cheap polyhedral approximation for cyl/sphere/ring
+        else:
             k = 12
             ang = np.linspace(0, 2 * np.pi, k, endpoint=False)
             v = [(np.cos(a), np.sin(a), -1) for a in ang] + \
@@ -65,12 +58,9 @@ class ProceduralGeometryBackend:
         s += "\n" + "\n".join("f " + " ".join(map(str, t)) for t in f)
         return s + "\n"
 
-class ApiGeometryBackend:
-    """text-to-3D / image-to-3D via an external generator callable.
 
-    Configure with an endpoint or generator callable; falls back to the
-    procedural backend transparently so the library always builds.
-    """
+class ApiGeometryBackend:
+    """text-to-3D / image-to-3D via an external generator callable."""
 
     def __init__(self, mode: str = "text_to_3d", generator=None):
         self.name = mode
@@ -79,13 +69,13 @@ class ApiGeometryBackend:
 
     def make_obj(self, kind: str, rng) -> str:
         if self._gen is not None:
-            try:  # pragma: no cover - needs the real model/service
+            try:
                 return self._gen(kind)
             except Exception:
                 pass
         return self._fallback.make_obj(kind, rng)
 
-# Texture backends.
+
 class ProceduralTextureBackend:
     name = "procedural_texture"
 
@@ -98,13 +88,13 @@ class ProceduralTextureBackend:
         res = 128
         base = rng.random(3)
         kind = rng.integers(3)
-        if kind == 0:                                  # noise
+        if kind == 0:
             img = rng.random((res, res, 3)) * 0.4 + base * 0.6
-        elif kind == 1:                                # stripes
+        elif kind == 1:
             xs = (np.sin(np.linspace(0, rng.uniform(6, 24), res))[:, None]
                   > 0).astype(float)
             img = xs[..., None] * base + (1 - xs[..., None]) * (1 - base)
-        else:                                          # checker
+        else:
             g = (np.indices((res, res)).sum(0) //
                  int(rng.integers(6, 20))) % 2
             img = g[..., None] * base + (1 - g[..., None]) * base[::-1]
@@ -114,8 +104,9 @@ class ProceduralTextureBackend:
         fig.savefig(path, dpi=res)
         plt.close(fig)
 
+
 class AITextureBackend(ProceduralTextureBackend):
-    """AI-driven texture generation (diffusion). Falls back to procedural."""
+    """Diffusion-based texture generator; falls back to procedural."""
 
     name = "ai_texture"
 
@@ -124,7 +115,7 @@ class AITextureBackend(ProceduralTextureBackend):
 
     def make_png(self, path: Path, rng) -> None:
         if self._gen is not None:
-            try:  # pragma: no cover - needs a real image model
+            try:
                 self._gen(str(path))
                 if path.exists():
                     return
@@ -132,7 +123,7 @@ class AITextureBackend(ProceduralTextureBackend):
                 pass
         super().make_png(path, rng)
 
-# Asset + library.
+
 _MJCF = """<mujoco model="{name}">
   <asset>
     <texture name="{name}_tex" type="2d" file="{tex}"/>
@@ -149,6 +140,7 @@ _MJCF = """<mujoco model="{name}">
 </mujoco>
 """
 
+
 @dataclass
 class Asset:
     name: str
@@ -159,6 +151,7 @@ class Asset:
     physics: dict
     geometry_backend: str
     texture_backend: str
+
 
 class AssetGenerator:
     def __init__(self, geometry=None, texture=None, seed: int = 0):
@@ -175,7 +168,7 @@ class AssetGenerator:
         mjcf_p = out / f"{name}.xml"
 
         obj_p.write_text(self.geometry.make_obj(kind, self.rng))
-        self.texture.make_png(tex_p, self.rng)        # appearance randomized
+        self.texture.make_png(tex_p, self.rng)
         phys = controlled_physics or PhysicalProperties.sample(self.rng)
         sx, sy, sz = ProceduralGeometryBackend._PRIMS.get(
             kind, (0.03, 0.03, 0.03))
@@ -186,7 +179,7 @@ class AssetGenerator:
         return Asset(name, kind, str(obj_p), str(tex_p), str(mjcf_p),
                      asdict(phys), self.geometry.name, self.texture.name)
 
-# reasoning-centric asset library: one diverse asset set per task family
+
 _FAMILY_KINDS = {
     "maze_navigation": ["sphere"], "seesaw_weight": ["box", "box"],
     "tangram_assembly": ["box", "cylinder", "box"],
@@ -194,21 +187,16 @@ _FAMILY_KINDS = {
     "sequential_counting": ["box", "box", "box"],
 }
 
+
 def build_asset_library(out_dir: str | Path, seed: int = 0,
                         episodes: int = 2) -> dict:
-    """Build the reasoning-centric library: ``episodes`` visually randomised
-    variants per family with controlled physics (paper §3.6).
-
-    Returns a manifest of every generated asset.
-    """
+    """Build one diverse asset set per task family, ``episodes`` variants each."""
     out = Path(out_dir)
     gen = AssetGenerator(seed=seed)
-    manifest = {"assets": [], "spec": "paper §3.6 reasoning-centric library "
-                "(appearance randomised, physics controlled)"}
+    manifest = {"assets": [],
+                "spec": "appearance randomized, physics controlled per episode"}
     for fam, kinds in _FAMILY_KINDS.items():
         for ep in range(episodes):
-            # Physics varied per episode from a logged range; appearance
-            # fully randomised via the texture backend.
             for ki, kind in enumerate(kinds):
                 phys = PhysicalProperties.sample(gen.rng)
                 a = gen.generate(f"{fam}_e{ep}_{ki}_{kind}", kind,

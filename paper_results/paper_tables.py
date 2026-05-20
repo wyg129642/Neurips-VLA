@@ -1,15 +1,15 @@
-"""Reported numbers from the paper, used for figure regeneration and checks.
+"""Reported numbers from the paper, used for analysis / figure regeneration.
 
-Holds the values reported in Tables 2-5 and Figure 3, so :mod:`robogym.analysis`
-can regenerate the Figure 3 radar charts and sanity-check a live runner's CSVs.
-For the human-automation alignment study (§4.4) only the reported mean Spearman
-``rho ~= 0.9`` (3 experts, 8 models, 5 dimensions) is stored; per-dimension ρ
-and the inter-rater Kendall's W are computed by the study harness instead.
+Tables 2-5 hold the values printed in the main text. Table 6 and the
+inter-rater Kendall's W are from Appendix B. ``REASONING_CATEGORY_SPLIT``
+records how the 50 System-2 tasks are distributed across the three
+reasoning categories, so per-category success counts in Table 4 are
+interpretable.
 """
 
 METRICS = ["SR", "Comp", "Space", "Time", "Smooth", "Safety"]
 
-# Table 2: Performance on Augmented LIBERO
+# Table 2: performance on Augmented LIBERO.
 TABLE2_AUGMENTED_LIBERO = {
     "LingBot-VLA w/ depth": [0.98, 99.34, 94.39, 65.32, 65.21, 69.27],
     "GigaBrain0.1":         [0.98, 99.03, 93.06, 61.01, 67.04, 71.52],
@@ -21,7 +21,7 @@ TABLE2_AUGMENTED_LIBERO = {
     "RDT":                  [0.94, 95.54, 78.13, 55.23, 43.56, 51.16],
 }
 
-# Table 3: Performance on System 2 reasoning tasks
+# Table 3: performance on the 50-task System-2 reasoning suite.
 TABLE3_REASONING = {
     "DM0":                  [0.32, 30.92, 14.07, 11.44, 27.84, 32.72],
     "GigaBrain0.1":         [0.28, 32.93, 12.81, 13.43, 26.57, 30.08],
@@ -33,9 +33,8 @@ TABLE3_REASONING = {
     "X-VLA":                [0.04, 5.85, 3.37, 1.34, 10.55, 7.18],
 }
 
-# Table 4: success rate per reasoning category
-# Columns as printed in the paper: Geometric, Physical, Memory.
-TABLE4_BY_CATEGORY = {  # [Geometric, Physical, Memory]
+# Table 4: success rate per reasoning category (Geometric, Physical, Memory).
+TABLE4_BY_CATEGORY = {
     "DM0":                  [0.47, 0.35, 0.13],
     "GigaBrain0.1":         [0.29, 0.47, 0.06],
     "LingBot-VLA w/ depth": [0.41, 0.12, 0.19],
@@ -47,15 +46,15 @@ TABLE4_BY_CATEGORY = {  # [Geometric, Physical, Memory]
 }
 CATEGORY_NAMES = ["Geometric", "Physical", "Memory"]
 
-# Table 5: Spearman's rho between the 5 metrics (reasoning tasks)
-# Transcribed from the paper's upper-triangular print, mirrored into the full
-# symmetric matrix:
-#                Comp  Space  Time  Smooth  Safety
-#   Comp         1.00  0.90   0.86  0.90    0.95
-#   Space              1.00   0.93  0.98    0.93
-#   Time                      1.00  0.93    0.88
-#   Smooth                          1.00    0.98
-#   Safety                                  1.00
+# How the 50 System-2 tasks split across the three reasoning categories.
+REASONING_CATEGORY_SPLIT = {"geometric": 18, "physical": 18, "memory": 14}
+REASONING_FAMILY_COUNTS = {
+    "tangram_assembly": 9, "number_block": 9,
+    "maze_navigation": 9, "seesaw_weight": 9,
+    "color_hanoi": 7, "sequential_counting": 7,
+}
+
+# Table 5: Spearman rho between the five core metrics on the reasoning suite.
 TABLE5_METRIC_NAMES = ["Comp", "Space", "Time", "Smooth", "Safety"]
 TABLE5_SPEARMAN = [
     [1.00, 0.90, 0.86, 0.90, 0.95],
@@ -65,12 +64,16 @@ TABLE5_SPEARMAN = [
     [0.95, 0.93, 0.88, 0.98, 1.00],
 ]
 
-# --- §4.4 Human-Automation Alignment --------------------------------------
-# The reported headline for this study: the mean Spearman rho between the
-# three-expert human consensus and the automated metrics, across 8 models and
-# the 5 dimensions. Per-dimension rho and the inter-rater Kendall's W are
-# produced by the study harness (robogym.analysis.human_study).
-MEAN_SPEARMAN = 0.90      # §4.4: "averages rho = 0.9"
+# Appendix B Table 6: per-dimension Spearman rho between the three-expert
+# human consensus and the automated metrics; the mean across dimensions is
+# the headline 0.90 in Section 4.4.
+TABLE6_HUMAN_AUTOMATION = {
+    "Comp": 0.88, "Space": 0.89, "Time": 0.92,
+    "Smooth": 0.86, "Safety": 0.95,
+}
+MEAN_SPEARMAN = 0.90
+INTER_RATER_KENDALLS_W = 0.89
+
 HUMAN_STUDY_N_EXPERTS = 3
 HUMAN_STUDY_N_MODELS = 8
 HUMAN_STUDY_N_DIMENSIONS = 5

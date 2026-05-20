@@ -1,12 +1,4 @@
-"""Scripted surrogate policy with tunable competence and failure modes.
-
-Used by tests and the demo to exercise the metric engine without loading a
-real VLA. The output is the expert action plus competence-scaled meander,
-jitter, sloth, occasional force violations, and an optional early-abandon
-event, so the trajectory evaluator produces a believable spread across the
-five dimensions. ``competence`` in ``[0, 1]`` interpolates between random
-behaviour and near-expert behaviour.
-"""
+"""Scripted surrogate policy with tunable competence."""
 
 from __future__ import annotations
 
@@ -14,7 +6,12 @@ import numpy as np
 
 from .base import Policy
 
+
 class MockPolicy(Policy):
+    """Expert demo plus competence-scaled meander, jitter, sloth, and an
+    optional early-abandon event. Lets the demo exercise the metric engine
+    without loading a real VLA."""
+
     def __init__(self, competence: float = 0.6, seed: int = 0,
                  meander: float = 1.0, jitter: float = 1.0,
                  sloth: float = 1.0, force_violations: float = 1.0,
@@ -39,7 +36,6 @@ class MockPolicy(Policy):
         self._drop_at = None
         if (self._actions is not None and self.drop_prob > 0
                 and self.rng.random() < self.drop_prob):
-            # abandon the task partway -> exercises completeness/"dropped"
             self._drop_at = int(len(self._actions)
                                 * self.rng.uniform(0.35, 0.7))
 
@@ -48,24 +44,17 @@ class MockPolicy(Policy):
             return np.zeros(7)
         if self._drop_at is not None and self._t >= self._drop_at:
             self._t += 1
-            return np.zeros(7)  # froze / gave up
+            return np.zeros(7)
 
         a = self._actions[self._t].copy()
         self._t += 1
         incompetence = 1.0 - self.c
 
-        # meander: low-freq lateral drift -> hurts spatial efficiency
         drift = self.meander * incompetence * 0.45 * np.sin(self._t * 0.22)
         a[:3] += drift
-
-        # jitter: high-freq tremor -> hurts smoothness (FFT/SPARC)
         a[:6] += (self.jitter * incompetence * 0.6
                   * self.rng.normal(0, 1, size=min(6, len(a))))
-
-        # sloth: shrink the commanded step -> hurts temporal efficiency
         a[:3] *= (1.0 - 0.55 * self.sloth * incompetence)
-
-        # force violations: occasionally drive hard into the table -> safety
         if (self.force_violations > 0
                 and self.rng.random() < 0.05 * incompetence):
             a[2] -= 1.0 * self.force_violations

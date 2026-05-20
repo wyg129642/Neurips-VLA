@@ -1,9 +1,4 @@
-"""RoboGym automated expert-trajectory pipeline (paper §4.1).
-
-algorithmic-oracle -> B-spline-smoothed waypoints ->
-success-filtered rollout -> 500 demos/task -> 25k balanced across logical
-domains, exported in the LIBERO HDF5 schema (+ RLDS + manifest).
-"""
+"""Automated expert-trajectory generation (Sec. 4.1)."""
 
 from .export import (
     write_manifest,

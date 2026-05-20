@@ -1,2 +1,8 @@
-"""Compat shim -> physics-grounded symbolic/geometric sims."""
-from .sim import NumberBlockSim, NumberBlockTask, TangramSim, TangramTask  # noqa: F401
+"""Re-exports for backward-compatible imports."""
+
+from .sim import (  # noqa: F401
+    NumberBlockSim,
+    NumberBlockTask,
+    TangramSim,
+    TangramTask,
+)

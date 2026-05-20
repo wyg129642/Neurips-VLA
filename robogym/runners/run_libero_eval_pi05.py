@@ -1,15 +1,9 @@
 """pi0 / pi0.5 LIBERO eval with multi-dimensional metrics.
 
-Combines the standard openpi ``examples/libero/main.py`` eval loop (LIBERO
-env, websocket policy client, 224px image preprocessing, action-chunk
-replay) with :class:`robogym.metrics.TrajectoryEvaluator` driven via
-:class:`robogym.envs.LiberoBackend`, so pi0 and pi0.5 are scored on the
-same five dimensions and emit the same CSV schema as the OpenVLA-OFT
-runner.
-
-Requires the full stack (``pip install -e ".[sim]"`` plus LIBERO plus a
-running openpi policy server). Imports are deferred so the package stays
-importable without it.
+Combines the openpi ``examples/libero`` rollout pattern with
+:class:`robogym.metrics.TrajectoryEvaluator` via :class:`LiberoBackend`,
+so pi0 / pi0.5 emit the same CSV schema as the OpenVLA-OFT runner.
+Requires the full simulation stack and a running openpi policy server.
 """
 
 from __future__ import annotations
@@ -28,6 +22,7 @@ from ..metrics import (
     write_task_details,
 )
 
+
 @dataclasses.dataclass
 class Pi05EvalConfig:
     host: str = "0.0.0.0"
@@ -36,14 +31,15 @@ class Pi05EvalConfig:
     datasets_root: str = "./LIBERO/datasets"
     num_trials_per_task: int = 10
     num_steps_wait: int = 10
-    replan_steps: int = 5            # openpi LIBERO default action horizon
+    replan_steps: int = 5
     resize: int = 224
     results_dir: str = "./results/pi05"
     run_id_note: str | None = None
     seed: int = 7
     model_name: str = "pi05"
 
-def _quat2axisangle(quat):  # openpi examples/libero helper parity
+
+def _quat2axisangle(quat):
     import math
 
     q = np.asarray(quat, float)
@@ -52,9 +48,9 @@ def _quat2axisangle(quat):  # openpi examples/libero helper parity
         return np.zeros(3)
     return (q[:3] / den) * (2.0 * math.acos(np.clip(q[3], -1.0, 1.0)))
 
+
 def _prep_obs(obs, resize):
-    """Mirror openpi examples/libero image/state preprocessing."""
-    import image_tools  # openpi-client image_tools (deferred)
+    import image_tools
 
     img = image_tools.convert_to_uint8(
         image_tools.resize_with_pad(obs["agentview_image"][::-1, ::-1],
@@ -69,11 +65,10 @@ def _prep_obs(obs, resize):
     return {"observation/image": img, "observation/wrist_image": wrist,
             "observation/state": state}
 
+
 def run_episode(cfg, env, backend, client, task_description,
                 expert_actions, expert_init_state):
-    """One π0.5 rollout + streaming evaluator (parity with the
-    OpenVLA runner's ``run_episode``)."""
-    from libero.libero import benchmark  # noqa: F401  (ensures stack present)
+    from libero.libero import benchmark  # noqa: F401
 
     env.reset()
     obs = backend.env.set_init_state(expert_init_state)
@@ -85,7 +80,7 @@ def run_episode(cfg, env, backend, client, task_description,
     while t < max_steps + cfg.num_steps_wait:
         if t < cfg.num_steps_wait:
             obs, _, done, info = env.step(
-                [0, 0, 0, 0, 0, 0, -1])           # openpi LIBERO dummy
+                [0, 0, 0, 0, 0, 0, -1])
             evaluator.update(np.zeros(7), info, step_idx=t)
             t += 1
             continue
@@ -103,8 +98,8 @@ def run_episode(cfg, env, backend, client, task_description,
         t += 1
     return success, evaluator.calculate_score()
 
+
 def eval_pi05(cfg: Pi05EvalConfig) -> dict:
-    """Full-suite π0.5 eval -> CSV tree (task/suite/global)."""
     from libero.libero import benchmark
     from openpi_client import websocket_client_policy
 
@@ -151,7 +146,8 @@ def eval_pi05(cfg: Pi05EvalConfig) -> dict:
         append_suite_row(suite_csv, ts)
     return write_global_row(global_csv, cfg.task_suite_name, per_task)
 
-if __name__ == "__main__":  # pragma: no cover - full stack only
+
+if __name__ == "__main__":
     import draccus
 
     eval_pi05(draccus.parse(Pi05EvalConfig))

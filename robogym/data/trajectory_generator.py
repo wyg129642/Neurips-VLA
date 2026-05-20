@@ -1,14 +1,8 @@
-"""Automated expert-trajectory generation (paper §4.1).
+"""Automated expert-trajectory generation for the System-2 suite.
 
-The §4.1 pipeline samples 500 successful trajectories per task across the
-50-task suite (25k total), balanced by logical domain. Each demo comes from
-the per-task algorithmic oracle, mapped to physical waypoints, then smoothed
-(cosine / B-spline) for jerk-free end-effector velocities. Rollouts that
-fail the success predicate are discarded.
-
-This module realises that pipeline on the physics reasoning sims. See
-:func:`generate_task_demos` for the per-task sampler and
-:func:`generate_dataset` for the suite-level streaming generator.
+Samples B-spline-smoothed demos from each task's algorithmic oracle and
+keeps only the ones that fire the success predicate, yielding the 500
+demos / task balanced across the three reasoning categories.
 """
 
 from __future__ import annotations
@@ -19,15 +13,17 @@ import numpy as np
 
 from ..tasks.registry import build_reasoning_suite
 
+
 @dataclass
 class GenConfig:
-    demos_per_task: int = 500          # paper: 500 successful / task
+    demos_per_task: int = 500
     suite_seed: int = 0
-    max_attempts_factor: int = 4       # resample budget to hit the quota
+    max_attempts_factor: int = 4
     max_steps: int = 600
-    jitter: float = 0.012              # demo-to-demo diversity (avoid fixed script)
-    require_success: bool = True       # keep only solved demonstrations
-    balance_by: str = "category"       # logical-domain balancing key
+    jitter: float = 0.012
+    require_success: bool = True
+    balance_by: str = "category"
+
 
 @dataclass
 class Demo:
@@ -36,15 +32,14 @@ class Demo:
     family: str
     category: str
     description: str
-    actions: np.ndarray               # (T, 7) B-spline-smoothed EE deltas
-    states: np.ndarray                # (T+?, S) flat sim states (demo_i/states)
+    actions: np.ndarray
+    states: np.ndarray
     success: bool
     seed: int
 
+
 def _rollout_states(sim, actions: np.ndarray, init_state: np.ndarray
                     ) -> tuple[np.ndarray, bool]:
-    """Replay the oracle actions, recording the flat state at each step and
-    whether the success predicate fired (used for success-filtering)."""
     sim.set_state(init_state)
     sim.forward()
     states = [sim.get_state().copy()]
@@ -57,9 +52,9 @@ def _rollout_states(sim, actions: np.ndarray, init_state: np.ndarray
             break
     return np.asarray(states, float), ok
 
+
 def generate_task_demos(task, cfg: GenConfig) -> list[Demo]:
-    """Sample ``cfg.demos_per_task`` successful, randomised demos for one
-    reasoning task (test-time randomization per demo, §3.6)."""
+    """Sample ``cfg.demos_per_task`` success-filtered demos for one task."""
     out: list[Demo] = []
     budget = cfg.demos_per_task * cfg.max_attempts_factor
     attempt = 0
@@ -82,6 +77,7 @@ def generate_task_demos(task, cfg: GenConfig) -> list[Demo]:
             success=ok, seed=seed))
     return out
 
+
 @dataclass
 class GenReport:
     total_demos: int = 0
@@ -89,12 +85,9 @@ class GenReport:
     per_category: dict = field(default_factory=dict)
     shortfall: dict = field(default_factory=dict)
 
-def generate_dataset(cfg: GenConfig, on_task=None):
-    """Generate the full balanced expert dataset across the 50-task suite.
 
-    Yields ``(task, demos)`` so callers can stream straight to disk (the 25k
-    set is large). Returns a :class:`GenReport` of quotas met / shortfalls.
-    """
+def generate_dataset(cfg: GenConfig, on_task=None):
+    """Stream the full 50-task suite. Yields ``(task, demos, report)``."""
     suite = build_reasoning_suite(seed=cfg.suite_seed)
     report = GenReport()
     for task in suite:

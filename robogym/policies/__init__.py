@@ -1,20 +1,4 @@
-"""RoboGym policy adapters.
-
-Always available (no heavy deps):
-
-- :class:`OraclePolicy`: replays the expert demonstration (sanity baseline).
-- :class:`MockPolicy`: a tunable degraded surrogate used by the demo and tests.
-- :class:`GenericClientPolicy`: any served model over HTTP/JSON.
-
-Lazy adapters (require the model's runtime stack):
-
-- :class:`OpenVLAOFTPolicy`: OpenVLA-OFT.
-- :class:`OpenPiPolicy`: openpi pi0 / pi0.5.
-- :func:`make_policy` and ``MODEL_REGISTRY``: adapters for the eight
-  models evaluated in the paper (pi0/pi0.5, DM0/CogAct/MemVLA via dexbotic,
-  GR00T, RDT, X-VLA, GigaBrain, LingBot-VLA). :func:`make_mock_fleet`
-  returns a parallel fleet of `MockPolicy` surrogates for the demo.
-"""
+"""Policy adapters: oracle and mock baselines plus the paper's eight models."""
 
 from .base import Policy
 from .generic_client import GenericClientPolicy
@@ -25,6 +9,7 @@ __all__ = [
     "Policy", "OraclePolicy", "MockPolicy", "GenericClientPolicy",
     "make_policy", "make_mock_fleet", "MODEL_REGISTRY",
 ]
+
 
 def __getattr__(name):
     if name == "OpenVLAOFTPolicy":

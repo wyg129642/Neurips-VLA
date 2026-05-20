@@ -1,14 +1,10 @@
-"""Human-Automation Alignment study harness (paper §4.4).
+"""Human-automation alignment study harness (Sec. 4.4, Appendix B).
 
-§4.4 has three human experts rank 8 models across the five dimensions; the
-reported headline is a mean Spearman ρ around 0.90 between the human
-consensus and the automated-metric rankings. This harness registers experts,
-collects per-expert per-dimension model rankings, persists them, and computes
-Kendall's W and the per-dimension / mean Spearman ρ against the automated
-rankings. :meth:`simulate_experts` is a *test harness only*: it perturbs the
-automated ordering with controlled noise so the analysis path can be
-exercised in CI without human input. The real study feeds real human
-rankings into the same API via :meth:`add_expert_ranking`.
+Three experts rank the eight models on the five dimensions; this harness
+collects rankings, computes Kendall's W and Spearman rho versus the
+automated metrics, and persists a report. :meth:`simulate_experts`
+populates noisy stand-in rankings so the analysis path can run in CI; the
+flag ``provenance`` distinguishes a simulated run from a real one.
 """
 
 from __future__ import annotations
@@ -23,18 +19,10 @@ from .correlation import kendalls_w, spearman_vs_human
 
 DIMS = ["Comp", "Space", "Time", "Smooth", "Safety"]
 
+
 @dataclass
 class HumanStudy:
-    """Collects expert rankings and aligns them with the automated metrics.
-
-    The instance tracks a ``provenance`` flag (``"real_experts"`` after
-    :meth:`add_expert_ranking` calls, ``"test_simulation"`` after
-    :meth:`simulate_experts`). The flag is written into every report so
-    downstream consumers can tell a real run apart from a harness run.
-    """
-
     models: list[str]
-    # rankings[expert][dim] = ordered list of models best -> worst
     rankings: dict = field(default_factory=dict)
     provenance: str = "uninitialised"
 
@@ -50,14 +38,7 @@ class HumanStudy:
     def simulate_experts(self, automated: dict[str, list[float]],
                          n_experts: int = 3, noise: float = 0.6,
                          seed: int = 0) -> None:
-        """Test harness: populate placeholder rankings as the automated
-        ordering plus bounded rank noise.
-
-        This is not a substitute for the real study. Use
-        :meth:`add_expert_ranking` to feed real human rankings. Calling
-        this method sets :attr:`provenance` to ``"test_simulation"`` so the
-        downstream report makes the source unambiguous.
-        """
+        """Populate stand-in rankings as automated ordering plus bounded noise."""
         rng = np.random.default_rng(seed)
         for e in range(n_experts):
             for di, dim in enumerate(DIMS):
@@ -68,9 +49,7 @@ class HumanStudy:
                 self.rankings.setdefault(f"expert_{e+1}", {})[dim] = list(order)
         self.provenance = "test_simulation"
 
-    # analysis
     def _rank_matrix(self, dim: str) -> np.ndarray:
-        """(n_experts, n_models) rank positions for ``dim``."""
         idx = {m: i for i, m in enumerate(self.models)}
         rows = []
         for exp in sorted(self.rankings):
@@ -84,7 +63,6 @@ class HumanStudy:
         return np.asarray(rows)
 
     def inter_rater_W(self) -> dict:
-        """Kendall's W per dimension + overall (§4.4 inter-rater reliability)."""
         out = {}
         for dim in DIMS:
             R = self._rank_matrix(dim)
@@ -94,7 +72,6 @@ class HumanStudy:
         return out
 
     def consensus(self, dim: str) -> list[str]:
-        """Borda-count human-consensus ranking for a dimension."""
         R = self._rank_matrix(dim)
         if len(R) == 0:
             return list(self.models)
@@ -102,8 +79,6 @@ class HumanStudy:
         return [self.models[i] for i in np.argsort(mean_rank)]
 
     def spearman_vs_automated(self, automated: dict[str, list[float]]) -> dict:
-        """Spearman ρ between human consensus and automated ranking per
-        dimension, and the mean across dimensions (§4.4)."""
         out = {}
         for di, dim in enumerate(DIMS):
             cons = self.consensus(dim)
@@ -113,7 +88,6 @@ class HumanStudy:
         out["mean"] = round(float(np.mean(list(out.values()))), 3)
         return out
 
-    # persistence
     def save(self, path: str | Path) -> Path:
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -134,13 +108,6 @@ class HumanStudy:
 
     def report(self, automated: dict[str, list[float]],
                out_dir: str | Path) -> dict:
-        """Full §4.4 report: Kendall's W, per-dimension ρ, and mean ρ.
-
-        The output file is named ``human_alignment_report.json`` for runs
-        backed by real expert rankings and
-        ``human_alignment_report_TEST_MODE.json`` when the rankings come
-        from :meth:`simulate_experts`, so the two cannot be confused.
-        """
         rep = {
             "provenance": self.provenance,
             "n_experts": len(self.rankings),

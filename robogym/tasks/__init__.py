@@ -1,9 +1,4 @@
-"""RoboGym System-2 reasoning task suite (paper §3.6 / Fig 2 / Table 4).
-
-50 deterministically-seeded tasks across 3 levels, all driven through the same
-unified runner and trajectory evaluator as augmented LIBERO, following the
-representative-task descriptions in §3.6.
-"""
+"""50-task System-2 reasoning suite (Sec. 3.6, Figure 2)."""
 
 from .base import CATEGORIES, ReasoningTask
 from .memory_sequential.sim import (

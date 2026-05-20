@@ -29,7 +29,6 @@ def test_runner_produces_csv_tree(tmp_path):
     assert (rd / "suite_summary.csv").exists()
     tds = list(rd.glob("libero_object/task_*/task_details.csv"))
     assert len(tds) == 2
-    # schema parity with the OpenVLA-OFT runner
     header = (rd / "global_summary.csv").read_text().splitlines()[0]
     assert header == ",".join(GLOBAL_HEADER)
     assert (rd / "suite_summary.csv").read_text().splitlines()[0] == \

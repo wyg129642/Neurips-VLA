@@ -1,14 +1,4 @@
-"""Symbolic and Geometric Reasoning sims.
-
-TangramSim: N shaped pieces, N target slots each demanding a specific shape.
-Success requires every piece to sit in the slot whose required shape matches
-(geometric fit); placing pieces arbitrarily fails. The slot-to-shape assignment
-is randomized per episode.
-
-NumberBlockSim: a 3x3 Latin square with several empty cells; the agent holds
-one block of a fixed value and must place it in the unique empty cell that
-keeps every row and column repeat-free. The grid is randomized per episode.
-"""
+"""Symbolic and Geometric Reasoning sims."""
 
 from __future__ import annotations
 
@@ -20,15 +10,16 @@ from ..base import ReasoningTask
 _Z = _TABLE_Z + 0.02
 _SHAPES = ["triangle", "square", "parallelogram"]
 
-# Tangram assembly
+
 class TangramSim(PhysicsReasoningSim):
+    """Each piece must land in the slot whose required shape matches."""
+
     category = "geometric"
 
     def _setup(self) -> None:
         r = self.rng
         n = 3
         shapes = list(r.permutation(_SHAPES))[:n]
-        # slot i demands shape slot_shape[i]; randomize the matching
         slot_shape = list(r.permutation(shapes))
         slots = np.array([[-0.08, 0.16, _Z], [0.0, 0.16, _Z],
                           [0.08, 0.16, _Z]])
@@ -39,7 +30,6 @@ class TangramSim(PhysicsReasoningSim):
         self._piece_shape = {f"piece_{i}": shapes[i] for i in range(n)}
         self._slots = slots
         self._slot_shape = slot_shape
-        # correct slot index for each piece
         self._target = {}
         for i in range(n):
             sh = self._piece_shape[f"piece_{i}"]
@@ -52,7 +42,6 @@ class TangramSim(PhysicsReasoningSim):
         }
 
     def _task_obs(self) -> dict:
-        # the geometry cue: which shape each slot expects (one-hot per slot)
         enc = np.array([_SHAPES.index(s) for s in self._slot_shape],
                        dtype=float)
         return {"slot_shapes": enc}
@@ -82,8 +71,7 @@ class TangramSim(PhysicsReasoningSim):
         return wps
 
     def naive_waypoints(self):
-        """Non-reasoning baseline: drop every piece into slot 0 (ignores the
-        shape<->slot constraint) -> fails."""
+        """Non-reasoning baseline: drop every piece into slot 0 -> fails."""
         wps, t = [], self._slots[0]
         for k in self.obj_names:
             s = self.obj_pos[k]
@@ -95,13 +83,16 @@ class TangramSim(PhysicsReasoningSim):
             ]
         return wps
 
+
 class TangramTask(ReasoningTask):
     category = "geometric"
     family = "tangram_assembly"
     sim_cls = TangramSim
 
-# Number-block Latin-square placement.
+
 class NumberBlockSim(PhysicsReasoningSim):
+    """Place the held block into the unique cell that keeps a Latin square."""
+
     category = "geometric"
 
     def _setup(self) -> None:
@@ -113,8 +104,6 @@ class NumberBlockSim(PhysicsReasoningSim):
         cells = [(i, j) for i in range(n) for j in range(n)]
 
         def legal_set(grid, blanks, v):
-            """Blanks where placing value ``v`` keeps every row & column
-            repeat-free given the currently filled cells."""
             out = []
             for (bi, bj) in blanks:
                 row_ok = v not in [grid[bi, c] for c in range(n)
@@ -125,9 +114,6 @@ class NumberBlockSim(PhysicsReasoningSim):
                     out.append((bi, bj))
             return out
 
-        # Search for an instance where the held value fits EXACTLY ONE blank
-        # and that legal cell is NOT the first blank (so the non-reasoning
-        # "drop in the first hole" baseline provably fails).
         legal = blanks = grid = None
         val = 0
         for _ in range(400):
@@ -145,19 +131,21 @@ class NumberBlockSim(PhysicsReasoningSim):
             if ls == [legc]:
                 order = list(bset)
                 r.shuffle(order)
-                if order[0] == legc:                  # ensure legal != first
+                if order[0] == legc:
                     order[0], order[-1] = order[-1], order[0]
                 legal, blanks, grid, val = legc, order, g, v
                 break
-        if legal is None:                              # fallback (rare)
+        if legal is None:
             legal = tuple(cells[0])
             val = int(full[legal])
             blanks = [tuple(cells[1]), legal, tuple(cells[2])]
             grid = full.astype(float).copy()
             for (i, j) in blanks:
                 grid[i, j] = 0.0
-        gx = lambda j: -0.10 + 0.10 * j  # noqa: E731
-        gy = lambda i: 0.10 + 0.07 * i   # noqa: E731
+
+        def gx(j): return -0.10 + 0.10 * j
+        def gy(i): return 0.10 + 0.07 * i
+
         self._cell_xy = {(i, j): np.array([gx(j), gy(i), _Z])
                          for i in range(n) for j in range(n)}
         self.obj_names = ["num_block"]
@@ -196,8 +184,7 @@ class NumberBlockSim(PhysicsReasoningSim):
         ]
 
     def naive_waypoints(self):
-        """Non-reasoning baseline: drop the block in the first blank cell
-        (ignores the Latin constraint) -> usually illegal -> fails."""
+        """Non-reasoning baseline: drop into the first blank cell -> usually illegal."""
         s = self.obj_pos["num_block"]
         bl = self.instance["blanks"][0]
         t = self._cell_xy[tuple(bl)]
@@ -207,6 +194,7 @@ class NumberBlockSim(PhysicsReasoningSim):
             [t[0], t[1], t[2] + 0.10, 1.0], [t[0], t[1], t[2], 1.0],
             [t[0], t[1], t[2], -1.0],
         ]
+
 
 class NumberBlockTask(ReasoningTask):
     category = "geometric"

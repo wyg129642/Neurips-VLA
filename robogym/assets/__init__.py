@@ -1,10 +1,4 @@
-"""RoboGym reasoning-centric asset generation (paper §3.6).
-
-text-to-3D / image-to-3D / AI-texture pipelines with a
-deterministic procedural fallback (runnable here). Appearance is heavily
-randomized; physical properties (mass / friction / mass-distribution) are
-sampled from *controlled, logged* ranges and varied at test time.
-"""
+"""Reasoning-centric asset generation (Sec. 3.6)."""
 
 from .generator import (
     AITextureBackend,
